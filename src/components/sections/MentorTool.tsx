@@ -7,7 +7,6 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Cpu, Sparkles, Loader2, Rocket, ArrowRight } from 'lucide-react'
-import { aiTradingMentorProgramSuggestion, type AITradingMentorProgramSuggestionOutput } from '@/ai/flows/ai-trading-mentor-program-suggestion'
 import { Reveal } from '@/components/ui/reveal'
 import { EnrollModal } from '@/components/modals/EnrollModal'
 
@@ -15,22 +14,46 @@ export function MentorTool() {
   const [financialGoals, setFinancialGoals] = useState('')
   const [tradingExperience, setTradingExperience] = useState('')
   const [loading, setLoading] = useState(false)
-  const [suggestion, setSuggestion] = useState<AITradingMentorProgramSuggestionOutput | null>(null)
+  const [suggestion, setSuggestion] = useState<{ recommendedProgram: string; justification: string } | null>(null)
 
-  const handleConsult = async (e: React.FormEvent) => {
+  const analyzeInputs = (financialGoals: string, tradingExperience: string) => {
+    const normalizedExperience = tradingExperience.toLowerCase()
+    const normalizedGoals = financialGoals.toLowerCase()
+
+    if (normalizedExperience.includes('beginner') || normalizedExperience.includes('no experience')) {
+      return {
+        recommendedProgram: 'Basic',
+        justification: 'You are at the beginning of your trading journey, so the Basic program is the best place to build a strong foundation.'
+      }
+    }
+
+    if (normalizedGoals.includes('income') || normalizedGoals.includes('profit') || normalizedGoals.includes('cash flow')) {
+      return {
+        recommendedProgram: 'Advanced',
+        justification: 'Your goal is income-focused, so Advanced will help you develop more mature trading skills and consistent strategies.'
+      }
+    }
+
+    if (normalizedGoals.includes('deep') || normalizedGoals.includes('advanced') || normalizedExperience.includes('intermediate')) {
+      return {
+        recommendedProgram: 'Advanced 2.0',
+        justification: 'You already have some experience and are ready for a deeper, more advanced trading curriculum.'
+      }
+    }
+
+    return {
+      recommendedProgram: 'Combo',
+      justification: 'Based on your profile, a comprehensive Combo package will give you the most balanced training and support.'
+    }
+  }
+
+  const handleConsult = (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    try {
-      const result = await aiTradingMentorProgramSuggestion({
-        financialGoals,
-        tradingExperience
-      })
-      setSuggestion(result)
-    } catch (error) {
-      console.error("AI Consultation failed", error)
-    } finally {
+    setTimeout(() => {
+      setSuggestion(analyzeInputs(financialGoals, tradingExperience))
       setLoading(false)
-    }
+    }, 500)
   }
 
   return (
