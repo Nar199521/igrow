@@ -1,0 +1,62 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 153 52% 4%;
+    --foreground: 0 0% 98%;
+    --card: 153 52% 6%;
+    --card-foreground: 0 0% 98%;
+    --popover: 153 52% 4%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 151 100% 45%;
+    --primary-foreground: 153 52% 4%;
+    --secondary: 187 71% 82%;
+    --secondary-foreground: 153 52% 4%;
+    --muted: 153 20% 15%;
+    --muted-foreground: 187 20% 70%;
+    --accent: 151 100% 45%;
+    --accent-foreground: 153 52% 4%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 153 30% 12%;
+    --input: 153 30% 12%;
+    --ring: 151 100% 45%;
+    --radius: 0.75rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-body antialiased selection:bg-primary/30;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-headline tracking-tight;
+  }
+}
+
+.glass-panel {
+  @apply bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl;
+}
+
+.neon-border {
+  @apply border-primary/50 shadow-[0_0_15px_rgba(0,230,118,0.2)];
+}
+
+.neon-glow {
+  text-shadow: 0 0 10px rgba(0, 230, 118, 0.5);
+}
+
+.animate-pulse-slow {
+  animation: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}

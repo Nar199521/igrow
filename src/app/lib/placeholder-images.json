@@ -1,0 +1,35 @@
+
+{
+  "placeholderImages": [
+    {
+      "id": "hero-trading",
+      "description": "Futuristic trading interface with charts",
+      "imageUrl": "https://picsum.photos/seed/igrow1/1200/800",
+      "imageHint": "trading charts"
+    },
+    {
+      "id": "program-basic",
+      "description": "Abstract growth visualization",
+      "imageUrl": "https://picsum.photos/seed/igrow2/600/400",
+      "imageHint": "growth abstract"
+    },
+    {
+      "id": "program-advanced",
+      "description": "Complex data network",
+      "imageUrl": "https://picsum.photos/seed/igrow3/600/400",
+      "imageHint": "network data"
+    },
+    {
+      "id": "program-internship",
+      "description": "Professional trading floor vibe",
+      "imageUrl": "https://picsum.photos/seed/igrow4/600/400",
+      "imageHint": "office workspace"
+    },
+    {
+      "id": "benefit-live",
+      "description": "Live market streaming dashboard",
+      "imageUrl": "https://picsum.photos/seed/igrow5/800/600",
+      "imageHint": "market dashboard"
+    }
+  ]
+}
