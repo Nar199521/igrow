@@ -48,6 +48,12 @@ export function Navbar() {
               {item}
             </Link>
           ))}
+          <Link href="/login" className="text-foreground/70 hover:text-primary transition-colors">
+            Login
+          </Link>
+          <Link href="/admin" className="text-foreground/70 hover:text-primary transition-colors">
+            Admin
+          </Link>
           <EnrollModal>
             <Button className="bg-primary text-background hover:bg-primary/90 rounded-full px-6 font-bold shadow-[0_0_15px_rgba(0,230,118,0.3)]">
               Join Society
@@ -77,6 +83,20 @@ export function Navbar() {
               {item}
             </Link>
           ))}
+          <Link 
+            href="/login"
+            className="text-xl font-headline font-medium text-foreground/70"
+            onClick={() => setIsMobileMenuOpen(false)}
+          >
+            Login
+          </Link>
+          <Link 
+            href="/admin"
+            className="text-xl font-headline font-medium text-foreground/70"
+            onClick={() => setIsMobileMenuOpen(false)}
+          >
+            Admin
+          </Link>
           <EnrollModal>
             <Button className="w-full bg-primary text-background py-6 text-lg font-bold">
               Join Society

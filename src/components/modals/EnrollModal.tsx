@@ -1,6 +1,6 @@
 "use client"
 
-import React from 'react'
+import React, { useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -14,7 +14,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { Rocket, Send, CheckCircle2, Shield, Mail, Phone, MapPin, User } from 'lucide-react'
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Rocket, Send, CheckCircle2, Shield, Mail, Phone, MapPin, User, Gift, AlertCircle, Lock } from 'lucide-react'
 
 const WHATSAPP_CHANNEL_URL = "https://whatsapp.com/channel/igrow-society"
 
@@ -25,6 +26,87 @@ interface EnrollModalProps {
 }
 
 export function EnrollModal({ children, open, onOpenChange }: EnrollModalProps) {
+  const [formData, setFormData] = useState({
+    name: '',
+    phone: '',
+    email: '',
+    address: '',
+    program: '',
+    referralName: '',
+    referralCode: '',
+    password: '',
+    confirmPassword: ''
+  })
+  const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target
+    setFormData(prev => ({ ...prev, [name]: value }))
+  }
+
+  const handleSelectChange = (value: string) => {
+    setFormData(prev => ({ ...prev, program: value }))
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setMessage(null)
+
+    // Validate passwords
+    if (!formData.password || !formData.confirmPassword) {
+      setMessage({ type: 'error', text: 'Please enter a password' })
+      setLoading(false)
+      return
+    }
+
+    if (formData.password.length < 6) {
+      setMessage({ type: 'error', text: 'Password must be at least 6 characters' })
+      setLoading(false)
+      return
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      setMessage({ type: 'error', text: 'Passwords do not match' })
+      setLoading(false)
+      return
+    }
+
+    try {
+      const response = await fetch('/api/registrations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        setMessage({ type: 'error', text: data.error || 'Registration failed' })
+      } else {
+        setMessage({ type: 'success', text: 'Registration successful! You can now login with your credentials.' })
+        setFormData({
+          name: '',
+          phone: '',
+          email: '',
+          address: '',
+          program: '',
+          referralName: '',
+          referralCode: '',
+          password: '',
+          confirmPassword: ''
+        })
+        setTimeout(() => {
+          onOpenChange?.(false)
+        }, 2000)
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'An error occurred. Please try again.' })
+    } finally {
+      setLoading(false)
+    }
+  }
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {children && (
@@ -82,20 +164,43 @@ export function EnrollModal({ children, open, onOpenChange }: EnrollModalProps) 
 
             <form 
               className="space-y-6 md:space-y-8 flex-1 overflow-y-auto pr-2 md:pr-4 -mr-2 md:-mr-4 custom-scrollbar pb-6 md:pb-10" 
-              onSubmit={(e) => e.preventDefault()}
+              onSubmit={handleSubmit}
             >
+              {message && (
+                <Alert className={message.type === 'success' ? 'border-green-500/50 bg-green-500/10' : 'border-red-500/50 bg-red-500/10'}>
+                  <AlertCircle className={`h-4 w-4 ${message.type === 'success' ? 'text-green-500' : 'text-red-500'}`} />
+                  <AlertDescription className={message.type === 'success' ? 'text-green-500 text-sm' : 'text-red-500 text-sm'}>
+                    {message.text}
+                  </AlertDescription>
+                </Alert>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div className="space-y-2.5">
                   <Label className="text-[10px] md:text-[11px] uppercase tracking-[0.2em] font-black text-foreground/40 flex items-center gap-2">
                     <User size={12} className="text-primary" /> Full Name
                   </Label>
-                  <Input placeholder="John Doe" className="bg-white/5 border-white/10 rounded-xl h-12 md:h-14 text-sm focus:ring-primary focus:border-primary transition-all" />
+                  <Input 
+                    placeholder="John Doe" 
+                    name="name"
+                    value={formData.name}
+                    onChange={handleChange}
+                    required
+                    className="bg-white/5 border-white/10 rounded-xl h-12 md:h-14 text-sm focus:ring-primary focus:border-primary transition-all" 
+                  />
                 </div>
                 <div className="space-y-2.5">
                   <Label className="text-[10px] md:text-[11px] uppercase tracking-[0.2em] font-black text-foreground/40 flex items-center gap-2">
                     <Phone size={12} className="text-primary" /> WhatsApp No.
                   </Label>
-                  <Input placeholder="+91 ..." className="bg-white/5 border-white/10 rounded-xl h-12 md:h-14 text-sm focus:ring-primary focus:border-primary transition-all" />
+                  <Input 
+                    placeholder="+91 ..." 
+                    name="phone"
+                    value={formData.phone}
+                    onChange={handleChange}
+                    required
+                    className="bg-white/5 border-white/10 rounded-xl h-12 md:h-14 text-sm focus:ring-primary focus:border-primary transition-all" 
+                  />
                 </div>
               </div>
 
@@ -103,34 +208,111 @@ export function EnrollModal({ children, open, onOpenChange }: EnrollModalProps) 
                 <Label className="text-[10px] md:text-[11px] uppercase tracking-[0.2em] font-black text-foreground/40 flex items-center gap-2">
                   <Mail size={12} className="text-primary" /> Email ID
                 </Label>
-                <Input type="email" placeholder="john@example.com" className="bg-white/5 border-white/10 rounded-xl h-12 md:h-14 text-sm focus:ring-primary focus:border-primary transition-all" />
+                <Input 
+                  type="email" 
+                  placeholder="john@example.com" 
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  required
+                  className="bg-white/5 border-white/10 rounded-xl h-12 md:h-14 text-sm focus:ring-primary focus:border-primary transition-all" 
+                />
               </div>
 
               <div className="space-y-2.5">
                 <Label className="text-[10px] md:text-[11px] uppercase tracking-[0.2em] font-black text-foreground/40 flex items-center gap-2">
                   <MapPin size={12} className="text-primary" /> Permanent Address
                 </Label>
-                <Textarea placeholder="Enter your full residential address..." className="bg-white/5 border-white/10 rounded-xl min-h-[100px] md:min-h-[120px] resize-none text-sm p-4 focus:ring-primary focus:border-primary transition-all" />
+                <Textarea 
+                  placeholder="Enter your full residential address..." 
+                  name="address"
+                  value={formData.address}
+                  onChange={handleChange}
+                  required
+                  className="bg-white/5 border-white/10 rounded-xl min-h-[100px] md:min-h-[120px] resize-none text-sm p-4 focus:ring-primary focus:border-primary transition-all" 
+                />
               </div>
 
               <div className="space-y-2.5">
                 <Label className="text-[10px] md:text-[11px] uppercase tracking-[0.2em] font-black text-foreground/40">Program Interest</Label>
-                <Select>
+                <Select value={formData.program} onValueChange={handleSelectChange}>
                   <SelectTrigger className="bg-white/5 border-white/10 rounded-xl h-12 md:h-14 text-sm focus:ring-primary transition-all">
                     <SelectValue placeholder="Select Desired Program" />
                   </SelectTrigger>
                   <SelectContent className="bg-[#0a0a0a] border-white/10 text-white rounded-xl">
-                    <SelectItem value="basic">Basic Tier (₹11,000)</SelectItem>
-                    <SelectItem value="advanced">Advanced Tier (₹21,000)</SelectItem>
-                    <SelectItem value="advanced2">Advanced 2.0 (₹31,000)</SelectItem>
-                    <SelectItem value="combo">Combo Mastery (₹45,000)</SelectItem>
-                    <SelectItem value="internship">Career Internship (₹15,000)</SelectItem>
+                    <SelectItem value="Basic Tier (₹11,000)">Basic Tier (₹11,000)</SelectItem>
+                    <SelectItem value="Advanced Tier (₹21,000)">Advanced Tier (₹21,000)</SelectItem>
+                    <SelectItem value="Advanced 2.0 (₹31,000)">Advanced 2.0 (₹31,000)</SelectItem>
+                    <SelectItem value="Combo Mastery (₹45,000)">Combo Mastery (₹45,000)</SelectItem>
+                    <SelectItem value="Career Internship (₹15,000)">Career Internship (₹15,000)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              <Button className="w-full bg-primary text-background hover:bg-primary/90 py-7 md:py-8 text-lg md:text-xl font-black rounded-2xl shadow-[0_15px_40px_rgba(0,230,118,0.2)] transition-all hover:scale-[1.01] active:scale-[0.99]">
-                Submit Application
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="space-y-2.5">
+                  <Label className="text-[10px] md:text-[11px] uppercase tracking-[0.2em] font-black text-foreground/40 flex items-center gap-2">
+                    <Lock size={12} className="text-primary" /> Password
+                  </Label>
+                  <Input 
+                    type="password"
+                    placeholder="Enter password (min. 6 characters)" 
+                    name="password"
+                    value={formData.password}
+                    onChange={handleChange}
+                    required
+                    className="bg-white/5 border-white/10 rounded-xl h-12 md:h-14 text-sm focus:ring-primary focus:border-primary transition-all" 
+                  />
+                </div>
+                <div className="space-y-2.5">
+                  <Label className="text-[10px] md:text-[11px] uppercase tracking-[0.2em] font-black text-foreground/40 flex items-center gap-2">
+                    <Lock size={12} className="text-primary" /> Confirm Password
+                  </Label>
+                  <Input 
+                    type="password"
+                    placeholder="Confirm your password" 
+                    name="confirmPassword"
+                    value={formData.confirmPassword}
+                    onChange={handleChange}
+                    required
+                    className="bg-white/5 border-white/10 rounded-xl h-12 md:h-14 text-sm focus:ring-primary focus:border-primary transition-all" 
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="space-y-2.5">
+                  <Label className="text-[10px] md:text-[11px] uppercase tracking-[0.2em] font-black text-foreground/40 flex items-center gap-2">
+                    <Gift size={12} className="text-primary" /> Referral Name (Optional)
+                  </Label>
+                  <Input 
+                    placeholder="Referrer's name" 
+                    name="referralName"
+                    value={formData.referralName}
+                    onChange={handleChange}
+                    className="bg-white/5 border-white/10 rounded-xl h-12 md:h-14 text-sm focus:ring-primary focus:border-primary transition-all" 
+                  />
+                </div>
+                <div className="space-y-2.5">
+                  <Label className="text-[10px] md:text-[11px] uppercase tracking-[0.2em] font-black text-foreground/40 flex items-center gap-2">
+                    <Gift size={12} className="text-primary" /> Referral Code (Optional)
+                  </Label>
+                  <Input 
+                    placeholder="Enter referral code" 
+                    name="referralCode"
+                    value={formData.referralCode}
+                    onChange={handleChange}
+                    className="bg-white/5 border-white/10 rounded-xl h-12 md:h-14 text-sm focus:ring-primary focus:border-primary transition-all" 
+                  />
+                </div>
+              </div>
+
+              <Button 
+                type="submit"
+                disabled={loading}
+                className="w-full bg-primary text-background hover:bg-primary/90 py-7 md:py-8 text-lg md:text-xl font-black rounded-2xl shadow-[0_15px_40px_rgba(0,230,118,0.2)] transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
+              >
+                {loading ? 'Submitting...' : 'Submit Application'}
               </Button>
 
               <div className="relative py-4">
