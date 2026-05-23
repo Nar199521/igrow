@@ -1,7 +1,7 @@
 
 "use client"
 
-import React, { useState, useEffect } from 'react'
+import React, { Suspense, useState, useEffect } from 'react'
 import { Navbar } from '@/components/layout/Navbar'
 import { Hero } from '@/components/sections/Hero'
 import { Programs } from '@/components/sections/Programs'
@@ -30,7 +30,9 @@ export default function Home() {
       <Navbar />
       
       {/* Auto-opening Enrollment Modal */}
-      <EnrollModal open={showWelcomePopup} onOpenChange={setShowWelcomePopup} />
+      <Suspense fallback={null}>
+        <EnrollModal open={showWelcomePopup} onOpenChange={setShowWelcomePopup} />
+      </Suspense>
 
       <Hero />
       <CryptoSlider />
