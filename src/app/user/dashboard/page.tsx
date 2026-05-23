@@ -22,6 +22,39 @@ const REFERRAL_LEVELS = [
   { name: 'GROW KOHINOOR', threshold: '1 Crore', rate: '5%', label: 'Special Reward' }
 ]
 
+const PAYMENT_METHODS = ['Bank Transfer', 'Crypto Wallet', 'UPI']
+const CRYPTO_CURRENCIES = ['USDT', 'BTC', 'ETH', 'BNB', 'SOL']
+
+function formatCurrency(value: number) {
+  return `₹${value.toLocaleString()}`
+}
+
+function flattenDownline(node: any | null): any[] {
+  if (!node) return []
+  return [node, ...flattenDownline(node.left), ...flattenDownline(node.right)]
+}
+
+function countDirectLegs(node: any | null) {
+  if (!node) return { left: 0, right: 0 }
+  return {
+    left: node.left ? flattenDownline(node.left).length : 0,
+    right: node.right ? flattenDownline(node.right).length : 0,
+  }
+}
+
+function calculateDirectCommission(node: any | null) {
+  if (!node) return 0
+  const direct = [node.left, node.right].filter(Boolean) as any[]
+  return direct.reduce((sum, child) => sum + (child.planAmount || 0) * 0.05, 0)
+}
+
+function calculateTeamCommission(node: any | null) {
+  if (!node) return 0
+  return flattenDownline(node)
+    .slice(1)
+    .reduce((sum, child) => sum + (child.planAmount || 0) * 0.02, 0)
+}
+
 const DASHBOARD_SECTIONS = [
   { icon: Home, label: 'Dashboard', color: 'from-blue-500 to-cyan-500' },
   { icon: Users, label: 'Member', color: 'from-purple-500 to-pink-500' },
@@ -59,6 +92,17 @@ export default function UserDashboard() {
     totalMembers: 0,
     pendingWithdraw: 0
   })
+  const [walletBalance, setWalletBalance] = useState<number>(0)
+  const [commissionBalance, setCommissionBalance] = useState<number>(0)
+  const [directCommission, setDirectCommission] = useState<number>(0)
+  const [teamCommission, setTeamCommission] = useState<number>(0)
+  const [balanceRequests, setBalanceRequests] = useState<any[]>([])
+  const [balanceRequestAmount, setBalanceRequestAmount] = useState('')
+  const [balanceRequestCurrency, setBalanceRequestCurrency] = useState<string>(CRYPTO_CURRENCIES[0])
+  const [balanceRequestMethod, setBalanceRequestMethod] = useState<string>(PAYMENT_METHODS[0])
+  const [topupAmount, setTopupAmount] = useState('')
+  const [topupCurrency, setTopupCurrency] = useState<string>(CRYPTO_CURRENCIES[0])
+  const [topupHistory, setTopupHistory] = useState<any[]>([])
 
   useEffect(() => {
     const token = localStorage.getItem('token')
@@ -71,23 +115,57 @@ export default function UserDashboard() {
 
     const parsedUser = JSON.parse(userData)
     setUser(parsedUser)
+
+    const storedWallet = parseFloat(localStorage.getItem('igrowWalletBalance') || '0') || 0
+    const storedCommission = parseFloat(localStorage.getItem('igrowCommissionBalance') || '0') || 0
+    const storedRequests = JSON.parse(localStorage.getItem('igrowBalanceRequests') || '[]')
+    const storedTopups = JSON.parse(localStorage.getItem('igrowTopupHistory') || '[]')
+
+    setWalletBalance(storedWallet)
+    setCommissionBalance(storedCommission)
+    setBalanceRequests(storedRequests)
+    setTopupHistory(storedTopups)
     setLoading(false)
 
-    // Calculate stats
-    if (downlineData?.stats) {
-      setStats({
-        totalEarnings: downlineData.stats.totalEarnings || 0,
-        directMembers: downlineData.stats.directMembers || 0,
-        totalMembers: downlineData.stats.totalMembers || 0,
-        pendingWithdraw: downlineData.stats.pendingWithdraw || 0
-      })
-    }
-
-    // Fetch downline data if user is approved
     if (parsedUser.status === 'approved') {
       fetchDownlineData(parsedUser.id)
     }
   }, [router])
+
+  useEffect(() => {
+    if (!downlineData) return
+
+    const directLegs = countDirectLegs(downlineData.downline)
+    const totalMembers = Math.max(0, downlineData.stats.totalMembers - 1)
+    const pendingWithdraw = balanceRequests.reduce((sum, request) => sum + (request.status === 'Pending' ? request.amount : 0), 0)
+    const direct = calculateDirectCommission(downlineData.downline)
+    const team = calculateTeamCommission(downlineData.downline)
+
+    setStats({
+      totalEarnings: direct + team,
+      directMembers: directLegs.left + directLegs.right,
+      totalMembers,
+      pendingWithdraw
+    })
+    setDirectCommission(direct)
+    setTeamCommission(team)
+  }, [downlineData, balanceRequests])
+
+  useEffect(() => {
+    localStorage.setItem('igrowWalletBalance', walletBalance.toString())
+  }, [walletBalance])
+
+  useEffect(() => {
+    localStorage.setItem('igrowCommissionBalance', commissionBalance.toString())
+  }, [commissionBalance])
+
+  useEffect(() => {
+    localStorage.setItem('igrowBalanceRequests', JSON.stringify(balanceRequests))
+  }, [balanceRequests])
+
+  useEffect(() => {
+    localStorage.setItem('igrowTopupHistory', JSON.stringify(topupHistory))
+  }, [topupHistory])
 
   const fetchDownlineData = async (userId: string) => {
     setDownlineLoading(true)
@@ -110,6 +188,47 @@ export default function UserDashboard() {
     setReferralLink(`${origin}/?referralCode=${encodeURIComponent(code)}&referralName=${encodeURIComponent(name)}`)
   }, [user])
 
+  const handleBalanceRequestSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const amount = parseFloat(balanceRequestAmount)
+    if (!amount || amount <= 0) return
+
+    const maxAvailable = walletBalance + commissionBalance
+    if (amount > maxAvailable) {
+      alert('Request amount exceeds your available balance.')
+      return
+    }
+
+    const request = {
+      id: Date.now().toString(),
+      amount,
+      currency: balanceRequestCurrency,
+      method: balanceRequestMethod,
+      status: 'Pending',
+      date: new Date().toLocaleDateString()
+    }
+
+    setBalanceRequests([request, ...balanceRequests])
+    setBalanceRequestAmount('')
+    setActiveTab('balance request')
+  }
+
+  const handleTopupSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const amount = parseFloat(topupAmount)
+    if (!amount || amount <= 0) return
+
+    setWalletBalance(walletBalance + amount)
+    const newTopup = {
+      id: Date.now().toString(),
+      amount,
+      currency: topupCurrency,
+      date: new Date().toLocaleDateString()
+    }
+    setTopupHistory([newTopup, ...topupHistory])
+    setTopupAmount('')
+  }
+
   const handleLogout = () => {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
@@ -129,6 +248,8 @@ export default function UserDashboard() {
 
   const isPending = user?.status === 'pending'
   const isApproved = user?.status === 'approved'
+  const legCounts = downlineData ? countDirectLegs(downlineData.downline) : { left: 0, right: 0 }
+  const totalBalance = walletBalance + commissionBalance
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#06080a] via-[#0a0c0e] to-[#0f1117] text-white">
@@ -430,41 +551,310 @@ export default function UserDashboard() {
 
             {/* Member Tab */}
             {activeTab === 'member' && (
-              <div className="bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 rounded-2xl p-8 text-center">
-                <Users className="w-16 h-16 text-primary/40 mx-auto mb-4" />
-                <p className="text-foreground/60 text-lg">Member management features coming soon</p>
+              <div className="space-y-8">
+                {isApproved ? (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="bg-white/5 border border-white/10 rounded-3xl p-6 text-left">
+                        <p className="text-xs uppercase tracking-[0.2em] text-foreground/60 font-bold mb-4">Left Chain</p>
+                        <p className="text-4xl font-bold text-primary">{legCounts.left}</p>
+                        <p className="text-foreground/50 text-sm mt-2">Users in your left team</p>
+                      </div>
+                      <div className="bg-white/5 border border-white/10 rounded-3xl p-6 text-left">
+                        <p className="text-xs uppercase tracking-[0.2em] text-foreground/60 font-bold mb-4">Right Chain</p>
+                        <p className="text-4xl font-bold text-primary">{legCounts.right}</p>
+                        <p className="text-foreground/50 text-sm mt-2">Users in your right team</p>
+                      </div>
+                      <div className="bg-white/5 border border-white/10 rounded-3xl p-6 text-left">
+                        <p className="text-xs uppercase tracking-[0.2em] text-foreground/60 font-bold mb-4">Total Structure</p>
+                        <p className="text-4xl font-bold text-primary">{stats.totalMembers}</p>
+                        <p className="text-foreground/50 text-sm mt-2">Total network members</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="bg-white/5 border border-white/10 rounded-3xl p-6 text-left">
+                        <p className="text-sm uppercase tracking-[0.18em] text-foreground/60 font-bold mb-3">Left Leg Detail</p>
+                        {downlineData?.downline?.left ? (
+                          <div className="space-y-2">
+                            <p className="text-white font-semibold">{downlineData.downline.left.name}</p>
+                            <p className="text-foreground/50 text-sm">{downlineData.downline.left.email}</p>
+                            <p className="text-green-400 font-semibold">{formatCurrency(downlineData.downline.left.planAmount)}</p>
+                          </div>
+                        ) : (
+                          <p className="text-foreground/50">No left referrals yet.</p>
+                        )}
+                      </div>
+                      <div className="bg-white/5 border border-white/10 rounded-3xl p-6 text-left">
+                        <p className="text-sm uppercase tracking-[0.18em] text-foreground/60 font-bold mb-3">Right Leg Detail</p>
+                        {downlineData?.downline?.right ? (
+                          <div className="space-y-2">
+                            <p className="text-white font-semibold">{downlineData.downline.right.name}</p>
+                            <p className="text-foreground/50 text-sm">{downlineData.downline.right.email}</p>
+                            <p className="text-green-400 font-semibold">{formatCurrency(downlineData.downline.right.planAmount)}</p>
+                          </div>
+                        ) : (
+                          <p className="text-foreground/50">No right referrals yet.</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="bg-white/5 border border-white/10 rounded-3xl p-8">
+                      <h2 className="text-xl font-bold mb-5 text-white">Live Network Preview</h2>
+                      {downlineLoading ? (
+                        <div className="flex items-center justify-center py-12">
+                          <Loader className="h-8 w-8 text-primary animate-spin" />
+                        </div>
+                      ) : (
+                        <DownlineTree data={downlineData?.downline} stats={downlineData?.stats} />
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="bg-white/5 border border-white/10 rounded-3xl p-8">
+                    <p className="text-foreground/60 text-lg">Your member tree and left/right structure will appear after approval and referrals are added.</p>
+                  </div>
+                )}
               </div>
             )}
 
             {/* Income Tab */}
             {activeTab === 'income' && (
-              <div className="bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 rounded-2xl p-8 text-center">
-                <TrendingUp className="w-16 h-16 text-green-400/40 mx-auto mb-4" />
-                <p className="text-foreground/60 text-lg">Income tracking coming soon</p>
+              <div className="space-y-8">
+                {isApproved ? (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="bg-white/5 border border-white/10 rounded-3xl p-6 text-left">
+                        <p className="text-xs uppercase tracking-[0.2em] text-foreground/60 font-bold mb-4">Direct Commission</p>
+                        <p className="text-4xl font-bold text-green-400">{formatCurrency(directCommission)}</p>
+                        <p className="text-foreground/50 text-sm mt-2">From your direct leg referrals</p>
+                      </div>
+                      <div className="bg-white/5 border border-white/10 rounded-3xl p-6 text-left">
+                        <p className="text-xs uppercase tracking-[0.2em] text-foreground/60 font-bold mb-4">Team Commission</p>
+                        <p className="text-4xl font-bold text-green-400">{formatCurrency(teamCommission)}</p>
+                        <p className="text-foreground/50 text-sm mt-2">From wider network activity</p>
+                      </div>
+                      <div className="bg-white/5 border border-white/10 rounded-3xl p-6 text-left">
+                        <p className="text-xs uppercase tracking-[0.2em] text-foreground/60 font-bold mb-4">Total Income</p>
+                        <p className="text-4xl font-bold text-primary">{formatCurrency(directCommission + teamCommission)}</p>
+                        <p className="text-foreground/50 text-sm mt-2">Real-time commission estimate</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+                        <p className="text-sm uppercase tracking-[0.18em] text-foreground/60 font-bold mb-4">Referral Earnings</p>
+                        {downlineData ? (
+                          <div className="space-y-3 text-sm text-foreground/70">
+                            <p><span className="text-white font-semibold">Total team members:</span> {stats.totalMembers}</p>
+                            <p><span className="text-white font-semibold">Left chain size:</span> {legCounts.left}</p>
+                            <p><span className="text-white font-semibold">Right chain size:</span> {legCounts.right}</p>
+                          </div>
+                        ) : (
+                          <p className="text-foreground/50">No referral data available yet.</p>
+                        )}
+                      </div>
+                      <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+                        <p className="text-sm uppercase tracking-[0.18em] text-foreground/60 font-bold mb-4">Available Wallet</p>
+                        <p className="text-3xl font-bold text-primary">{formatCurrency(totalBalance)}</p>
+                        <p className="text-foreground/50 text-sm mt-2">Includes topup and earned commissions</p>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="bg-white/5 border border-white/10 rounded-3xl p-8">
+                    <p className="text-foreground/60 text-lg">Income details appear after admin approval and your first referrals join the network.</p>
+                  </div>
+                )}
               </div>
             )}
 
             {/* Balance Request Tab */}
             {activeTab === 'balance request' && (
-              <div className="bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 rounded-2xl p-8 text-center">
-                <ListChecks className="w-16 h-16 text-orange-400/40 mx-auto mb-4" />
-                <p className="text-foreground/60 text-lg">Balance request features coming soon</p>
+              <div className="space-y-8">
+                <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-6">
+                  <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+                    <h2 className="text-xl font-bold mb-4 text-white">Request Balance</h2>
+                    <p className="text-foreground/60 mb-6">Request funds from admin using any supported crypto currency.</p>
+                    <form onSubmit={handleBalanceRequestSubmit} className="space-y-4">
+                      <div>
+                        <label className="block text-xs uppercase tracking-[0.18em] text-foreground/60 font-bold mb-2">Amount</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={balanceRequestAmount}
+                          onChange={(e) => setBalanceRequestAmount(e.target.value)}
+                          className="w-full rounded-xl border border-white/10 bg-[#070b11] px-4 py-3 text-sm text-white focus:border-primary focus:outline-none"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs uppercase tracking-[0.18em] text-foreground/60 font-bold mb-2">Currency</label>
+                          <select
+                            value={balanceRequestCurrency}
+                            onChange={(e) => setBalanceRequestCurrency(e.target.value)}
+                            className="w-full rounded-xl border border-white/10 bg-[#070b11] px-4 py-3 text-sm text-white"
+                          >
+                            {CRYPTO_CURRENCIES.map((currency) => (
+                              <option key={currency} value={currency}>{currency}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs uppercase tracking-[0.18em] text-foreground/60 font-bold mb-2">Method</label>
+                          <select
+                            value={balanceRequestMethod}
+                            onChange={(e) => setBalanceRequestMethod(e.target.value)}
+                            className="w-full rounded-xl border border-white/10 bg-[#070b11] px-4 py-3 text-sm text-white"
+                          >
+                            {PAYMENT_METHODS.map((method) => (
+                              <option key={method} value={method}>{method}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="rounded-3xl border border-white/10 bg-[#08101a] p-4 text-sm text-foreground/60">
+                        Available balance: <span className="text-white font-semibold">{formatCurrency(totalBalance)}</span>
+                      </div>
+                      <button
+                        type="submit"
+                        className="w-full rounded-2xl bg-primary px-5 py-3 text-sm font-bold text-background hover:bg-primary/90 transition"
+                      >
+                        Submit Request
+                      </button>
+                    </form>
+                  </div>
+
+                  <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+                    <h2 className="text-xl font-bold mb-4 text-white">Your Requests</h2>
+                    {balanceRequests.length > 0 ? (
+                      <div className="space-y-3 text-sm text-foreground/70">
+                        {balanceRequests.map((request) => (
+                          <div key={request.id} className="rounded-2xl bg-[#0a0f19] border border-white/10 p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="font-semibold text-white">{formatCurrency(request.amount)} {request.currency}</p>
+                              <span className="text-xs uppercase tracking-[0.14em] text-foreground/60">{request.status}</span>
+                            </div>
+                            <p className="text-foreground/50 text-xs mt-2">{request.method} • {request.date}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-foreground/50 text-sm">No balance requests submitted yet.</p>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
 
             {/* Topup Tab */}
             {activeTab === 'topup' && (
-              <div className="bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 rounded-2xl p-8 text-center">
-                <CreditCard className="w-16 h-16 text-indigo-400/40 mx-auto mb-4" />
-                <p className="text-foreground/60 text-lg">Topup services coming soon</p>
+              <div className="space-y-8">
+                <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-6">
+                  <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+                    <h2 className="text-xl font-bold mb-4 text-white">Wallet Topup</h2>
+                    <p className="text-foreground/60 mb-6">Recharge your wallet instantly using supported cryptocurrencies.</p>
+                    <form onSubmit={handleTopupSubmit} className="space-y-4">
+                      <div>
+                        <label className="block text-xs uppercase tracking-[0.18em] text-foreground/60 font-bold mb-2">Amount</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={topupAmount}
+                          onChange={(e) => setTopupAmount(e.target.value)}
+                          className="w-full rounded-xl border border-white/10 bg-[#070b11] px-4 py-3 text-sm text-white focus:border-primary focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs uppercase tracking-[0.18em] text-foreground/60 font-bold mb-2">Currency</label>
+                        <select
+                          value={topupCurrency}
+                          onChange={(e) => setTopupCurrency(e.target.value)}
+                          className="w-full rounded-xl border border-white/10 bg-[#070b11] px-4 py-3 text-sm text-white"
+                        >
+                          {CRYPTO_CURRENCIES.map((currency) => (
+                            <option key={currency} value={currency}>{currency}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <button
+                        type="submit"
+                        className="w-full rounded-2xl bg-primary px-5 py-3 text-sm font-bold text-background hover:bg-primary/90 transition"
+                      >
+                        Add Funds to Wallet
+                      </button>
+                    </form>
+                  </div>
+
+                  <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+                    <h2 className="text-xl font-bold mb-4 text-white">Topup History</h2>
+                    {topupHistory.length > 0 ? (
+                      <div className="space-y-3 text-sm text-foreground/70">
+                        {topupHistory.map((entry) => (
+                          <div key={entry.id} className="rounded-2xl bg-[#0a0f19] border border-white/10 p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="text-white font-semibold">{formatCurrency(entry.amount)} {entry.currency}</p>
+                              <span className="text-foreground/50 text-xs">{entry.date}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-foreground/50 text-sm">No topup history yet.</p>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
 
             {/* My Wallet Tab */}
             {activeTab === 'my wallet' && (
-              <div className="bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 rounded-2xl p-8 text-center">
-                <Wallet className="w-16 h-16 text-teal-400/40 mx-auto mb-4" />
-                <p className="text-foreground/60 text-lg">Wallet management coming soon</p>
+              <div className="space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+                    <p className="text-xs uppercase tracking-[0.2em] text-foreground/60 font-bold mb-4">Wallet Balance</p>
+                    <p className="text-4xl font-bold text-primary">{formatCurrency(walletBalance)}</p>
+                    <p className="text-foreground/50 text-sm mt-2">Your spendable balance for topups and transfers.</p>
+                  </div>
+                  <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+                    <p className="text-xs uppercase tracking-[0.2em] text-foreground/60 font-bold mb-4">Commission Balance</p>
+                    <p className="text-4xl font-bold text-green-400">{formatCurrency(commissionBalance)}</p>
+                    <p className="text-foreground/50 text-sm mt-2">Your earned commissions from referrals.</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+                    <p className="text-xs uppercase tracking-[0.2em] text-foreground/60 font-bold mb-4">Total Available</p>
+                    <p className="text-3xl font-bold text-primary">{formatCurrency(totalBalance)}</p>
+                  </div>
+                  <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+                    <p className="text-xs uppercase tracking-[0.2em] text-foreground/60 font-bold mb-4">Direct Commission</p>
+                    <p className="text-3xl font-bold text-green-400">{formatCurrency(directCommission)}</p>
+                  </div>
+                  <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+                    <p className="text-xs uppercase tracking-[0.2em] text-foreground/60 font-bold mb-4">Team Commission</p>
+                    <p className="text-3xl font-bold text-green-400">{formatCurrency(teamCommission)}</p>
+                  </div>
+                </div>
+                <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+                  <h2 className="text-lg font-bold mb-4 text-white">Recent Activity</h2>
+                  <div className="grid grid-cols-1 gap-3 text-sm text-foreground/70">
+                    <div className="rounded-2xl bg-[#0a0f19] border border-white/10 p-4">
+                      <p className="text-white font-semibold">Wallet + Commission</p>
+                      <p className="text-foreground/50 mt-2">{formatCurrency(totalBalance)} available balance</p>
+                    </div>
+                    <div className="rounded-2xl bg-[#0a0f19] border border-white/10 p-4">
+                      <p className="text-white font-semibold">Pending Withdrawal</p>
+                      <p className="text-foreground/50 mt-2">{formatCurrency(stats.pendingWithdraw)} in requests</p>
+                    </div>
+                    <div className="rounded-2xl bg-[#0a0f19] border border-white/10 p-4">
+                      <p className="text-white font-semibold">Direct / Team Members</p>
+                      <p className="text-foreground/50 mt-2">{stats.directMembers} direct referrals • {stats.totalMembers} total team</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
