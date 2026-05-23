@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import {
   Dialog,
   DialogContent,
@@ -26,6 +27,7 @@ interface EnrollModalProps {
 }
 
 export function EnrollModal({ children, open, onOpenChange }: EnrollModalProps) {
+  const searchParams = useSearchParams()
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -39,6 +41,34 @@ export function EnrollModal({ children, open, onOpenChange }: EnrollModalProps) 
   })
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+
+  useEffect(() => {
+    const referralName = searchParams.get('referralName') || ''
+    const referralCode = searchParams.get('referralCode') || ''
+
+    if (referralName || referralCode) {
+      setFormData(prev => ({
+        ...prev,
+        referralName,
+        referralCode
+      }))
+      localStorage.setItem('igrowReferral', JSON.stringify({ referralName, referralCode }))
+    } else {
+      const saved = localStorage.getItem('igrowReferral')
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved)
+          setFormData(prev => ({
+            ...prev,
+            referralName: parsed.referralName || '',
+            referralCode: parsed.referralCode || ''
+          }))
+        } catch (error) {
+          console.warn('Unable to parse saved referral data', error)
+        }
+      }
+    }
+  }, [searchParams])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target

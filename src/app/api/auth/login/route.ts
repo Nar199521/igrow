@@ -1,23 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { registrations } from '../../registrations/route'
 
 export const dynamic = 'force-dynamic'
-
-interface User {
-  id: string
-  email: string
-  password: string
-  name: string
-}
-
-// In-memory user storage (in production, use a database)
-let users: User[] = [
-  {
-    id: '1',
-    email: 'user@example.com',
-    password: 'password123',
-    name: 'Demo User'
-  }
-]
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,25 +15,47 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const user = users.find(u => u.email === email && u.password === password)
+    // Check against registrations
+    const registration = registrations.find(
+      r => r.email === email && r.password === password
+    )
 
-    if (!user) {
+    if (!registration) {
       return NextResponse.json(
         { error: 'Invalid email or password' },
         { status: 401 }
       )
     }
 
-    // In production, create a proper JWT token
-    const token = Buffer.from(`${user.id}:${Date.now()}`).toString('base64')
+    // Check if registration is approved
+    if (registration.status === 'pending') {
+      return NextResponse.json(
+        { error: 'Your registration is pending admin approval. Please check back later.' },
+        { status: 403 }
+      )
+    }
+
+    if (registration.status === 'rejected') {
+      return NextResponse.json(
+        { error: `Your registration was rejected. Reason: ${registration.rejectionReason}` },
+        { status: 403 }
+      )
+    }
+
+    // Create token
+    const token = Buffer.from(`${registration.id}:${Date.now()}`).toString('base64')
 
     return NextResponse.json({
       message: 'Login successful',
       token,
       user: {
-        id: user.id,
-        email: user.email,
-        name: user.name
+        id: registration.id,
+        email: registration.email,
+        name: registration.name,
+        status: registration.status,
+        planAmount: registration.planAmount,
+        program: registration.program,
+        approvedAt: registration.approvedAt
       }
     })
   } catch (error) {
